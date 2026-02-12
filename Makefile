@@ -13,7 +13,7 @@ TARGET ?= alphachess
 ## Build the target by default
 all: $(TARGET)
 
-SRC = main.c ResetBoard.c PlayMove.c FEN.c showboard.c
+SRC = main.c ResetBoard.c PlayMove.c FEN.c showboard.c bestmove.c
 OBJ = $(SRC:.c=.o)
 
 $(TARGET) : $(OBJ)

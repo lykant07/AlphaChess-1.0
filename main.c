@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
 #include "commands.h"
@@ -10,6 +11,11 @@ int main(void){
     char* engineName = "AlphaChess";
     char* engineVersion = "1.0";
     bool quitSession = false;
+    int undoTop = -1;
+    int maxStackSize = 4;
+    MoveUndo* stack = malloc(maxStackSize * sizeof(MoveUndo));
+    if (!stack) return 1;
+    UndoStackInstance undoStack = {stack, undoTop, maxStackSize};
     MatchDataInstance matchData = {
         .Board = {{{0}}},
         .playerTurn = 'w',
@@ -56,7 +62,7 @@ int main(void){
                                 }
                                 moves[k++] = ' ';
                             }
-                            if (!PlayMoves(&matchData, moves)) validCommand = false;
+                            if (!PlayMoves(&matchData, moves, &undoStack)) validCommand = false;
                         } else{ //position startpos moves
                             continue;
                         }
@@ -74,7 +80,7 @@ int main(void){
                                 }
                                 moves[k++] = ' ';
                             }
-                            if (!PlayMoves(&matchData, moves)){
+                            if (!PlayMoves(&matchData, moves, &undoStack)){
                                 validCommand = false;
                             }
                         } else{ //position startpos [garbage]
@@ -96,7 +102,7 @@ int main(void){
                                         }
                                         moves[k++] = ' ';
                                     }
-                                    if (!PlayMoves(&matchData, moves)) validCommand = false;
+                                    if (!PlayMoves(&matchData, moves, &undoStack)) validCommand = false;
                                 } else{// position [FEN] [random]
                                     validCommand = false;
                                 }
@@ -119,6 +125,18 @@ int main(void){
                     ResetBoard(&matchData);
                 } else if (strcmp(params[0], "showboard") == 0){
                     ShowBoard(matchData.Board);
+                } else if (strcmp(params[0], "go") == 0){
+
+                } else if (strcmp(params[0], "bestmove") == 0){
+                    MoveInstance BestMove = GetBestMove(&matchData, &undoStack);
+                    if (BestMove.promote){
+                        printf("bestmove %c%d%c%d%c\n", BestMove.from.col, BestMove.from.row, BestMove.to.col, BestMove.to.row, BestMove.promote);
+                        fflush(stdout);
+                    } else{
+                        printf("bestmove %c%d%c%d\n", BestMove.from.col, BestMove.from.row, BestMove.to.col, BestMove.to.row);
+                        fflush(stdout);
+                    }
+                    PlayMove(&matchData, BestMove, &undoStack);
                 } else if (strcmp(params[0], "quit") == 0){
                     printf("quit\n");
                     fflush(stdout);
@@ -146,6 +164,8 @@ int main(void){
             putchar('\n');
         }*/
     } while (!quitSession);
+
+    free(undoStack.stack);
 
     return 0;
 }
