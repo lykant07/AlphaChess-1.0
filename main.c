@@ -126,8 +126,6 @@ int main(void){
                 } else if (strcmp(params[0], "showboard") == 0){
                     ShowBoard(matchData.Board);
                 } else if (strcmp(params[0], "go") == 0){
-
-                } else if (strcmp(params[0], "bestmove") == 0){
                     MoveInstance BestMove = GetBestMove(&matchData, &undoStack);
                     if (BestMove.promote){
                         printf("bestmove %c%d%c%d%c\n", BestMove.from.col, BestMove.from.row, BestMove.to.col, BestMove.to.row, BestMove.promote);

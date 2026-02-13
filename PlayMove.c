@@ -806,7 +806,7 @@ LegalMovesInstance GetLegalMoves(MatchDataInstance* matchData, SquareInstance sq
 bool PlayMove(MatchDataInstance* matchData, MoveInstance move, UndoStackInstance* undoStack){
     bool validMove = false;
 
-    printf("Checking move %c%d%c%d\n", move.from.col, move.from.row, move.to.col, move.to.row);
+    //printf("Checking move %c%d%c%d\n", move.from.col, move.from.row, move.to.col, move.to.row);
     //printf("Player turn: %c\n", matchData->playerTurn);
 
     LegalMovesInstance LegalMovesInst = GetLegalMoves(matchData, move.from);
