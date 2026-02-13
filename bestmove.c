@@ -1,9 +1,20 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <limits.h>
+#include <sys/select.h>
+#include <unistd.h>
 #include "commands.h"
 
 #define MAX_DEPTH 6
+
+bool inputAvailable(void) {
+    struct timeval tv = {0, 0}; //Return results immediately
+    fd_set fds; //The files we care about
+    FD_ZERO(&fds); //Clear fds
+    FD_SET(STDIN_FILENO, &fds); //Add stdin to fds
+    return select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv) > 0; //Check readability of stdin
+}
 
 void CopyMove(MoveInstance* dest, MoveInstance* src){
     dest->from.col = src->from.col;
@@ -13,8 +24,18 @@ void CopyMove(MoveInstance* dest, MoveInstance* src){
     dest->promote = src->promote;
 }
 
-int GetEvaluation(MatchDataInstance* matchData, UndoStackInstance* undoStack, unsigned int depth, int alpha, int beta){
-    if (depth == 0) return matchData->eval;
+int GetEvaluation(MatchDataInstance* matchData, UndoStackInstance* undoStack, unsigned int depth, int alpha, int beta, bool* searchStopped){
+    if (inputAvailable()){
+        char buf[256];
+        char* temp = fgets(buf, sizeof(buf), stdin);
+        if (temp){
+            if (strncmp(buf, "stop", 4) == 0){
+                *searchStopped = true;
+            }
+        }
+    }
+    
+    if (depth == 0 || (*searchStopped)) return matchData->eval;
 
     int maxEval = INT_MIN;
     int minEval = INT_MAX;
@@ -31,7 +52,7 @@ int GetEvaluation(MatchDataInstance* matchData, UndoStackInstance* undoStack, un
                         foundMove = true;
                         MoveInstance currentMove = LegalMovesInst.LegalMoves[k];
                         MakeMove(matchData, currentMove, undoStack);
-                        int moveEval = GetEvaluation(matchData, undoStack, depth-1, alpha, beta);
+                        int moveEval = GetEvaluation(matchData, undoStack, depth-1, alpha, beta, searchStopped);
                         if (moveEval > maxEval) maxEval = moveEval;
                         if (moveEval > alpha) alpha = moveEval;
                         UnmakeMove(matchData, undoStack);
@@ -46,7 +67,7 @@ int GetEvaluation(MatchDataInstance* matchData, UndoStackInstance* undoStack, un
                         foundMove = true;
                         MoveInstance currentMove = LegalMovesInst.LegalMoves[k];
                         MakeMove(matchData, currentMove, undoStack);
-                        int moveEval = GetEvaluation(matchData, undoStack, depth-1, alpha, beta);
+                        int moveEval = GetEvaluation(matchData, undoStack, depth-1, alpha, beta, searchStopped);
                         if (moveEval < minEval) minEval = moveEval;
                         if (moveEval < beta) beta = moveEval;
                         UnmakeMove(matchData, undoStack);
@@ -71,57 +92,62 @@ int GetEvaluation(MatchDataInstance* matchData, UndoStackInstance* undoStack, un
 
 MoveInstance GetBestMove(MatchDataInstance* matchData, UndoStackInstance* undoStack){
 
-    MoveInstance BestMove;
-    int maxEval = INT_MIN;
-    int minEval = INT_MAX;
-    int alpha = INT_MIN;
-    int beta = INT_MAX;
+    MoveInstance BestMove = {{'0',0},{'0',0},0};
     bool moveFound = false;
-
-    for (int i = 0; i < 8; i++){
-        for (int j = 0; j < 8; j++){
-            SquareInstance square = {'a' + j, 8 - i};
-            char piece = matchData->Board.squares[i][j];
-            if (matchData->playerTurn == 'w'){
-                if (piece >= 'A' && piece <= 'Z'){ //For all white pieces on board
-                    LegalMovesInstance LegalMovesInst = GetLegalMoves(matchData, square);
-                    //printf("-------\n");
-                    for (int k = 0; k < LegalMovesInst.numMoves; k++){ //Try out all legal moves
-                        MoveInstance currentMove = LegalMovesInst.LegalMoves[k];
-                        /*printf("%c%d%c%d", currentMove.from.col, currentMove.from.row, currentMove.to.col, currentMove.to.row);
-                        if (currentMove.promote) putchar(currentMove.promote);
-                        putchar('\n');*/
-                        MakeMove(matchData, currentMove, undoStack);
-                        int moveEval = GetEvaluation(matchData, undoStack, MAX_DEPTH-1, alpha, beta);
-                        if (moveEval > maxEval){
-                            moveFound = true;
-                            maxEval = moveEval;
-                            CopyMove(&BestMove, &currentMove);
+    bool searchStopped = false;
+    
+    for (int depth = 1; depth <= MAX_DEPTH && !searchStopped; depth++){ //Check all depths starting from 1 to ensure that we always have a move ready
+        int maxEval = INT_MIN;
+        int minEval = INT_MAX;
+        int alpha = INT_MIN;
+        int beta = INT_MAX;
+        MoveInstance TempBestMove = {{'0',0},{'0',0},0};
+        for (int i = 0; i < 8; i++){
+            for (int j = 0; j < 8; j++){
+                SquareInstance square = {'a' + j, 8 - i};
+                char piece = matchData->Board.squares[i][j];
+                if (matchData->playerTurn == 'w'){
+                    if (piece >= 'A' && piece <= 'Z'){ //For all white pieces on board
+                        LegalMovesInstance LegalMovesInst = GetLegalMoves(matchData, square);
+                        //printf("-------\n");
+                        for (int k = 0; k < LegalMovesInst.numMoves; k++){ //Try out all legal moves
+                            MoveInstance currentMove = LegalMovesInst.LegalMoves[k];
+                            /*printf("%c%d%c%d", currentMove.from.col, currentMove.from.row, currentMove.to.col, currentMove.to.row);
+                            if (currentMove.promote) putchar(currentMove.promote);
+                            putchar('\n');*/
+                            MakeMove(matchData, currentMove, undoStack);
+                            int moveEval = GetEvaluation(matchData, undoStack, depth-1, alpha, beta, &searchStopped);
+                            if (moveEval > maxEval){
+                                moveFound = true;
+                                maxEval = moveEval;
+                                CopyMove(&TempBestMove, &currentMove);
+                            }
+                            if (moveEval > alpha) alpha = moveEval;
+                            UnmakeMove(matchData, undoStack);
+                            if (beta <= alpha) break;
                         }
-                        if (moveEval > alpha) alpha = moveEval;
-                        UnmakeMove(matchData, undoStack);
-                        if (beta <= alpha) break;
                     }
-                }
-            } else{
-                if (piece >= 'a' && piece <= 'z'){ //For all black pieces on board
-                    LegalMovesInstance LegalMovesInst = GetLegalMoves(matchData, square);
-                    for (int k = 0; k < LegalMovesInst.numMoves; k++){ //Try out all legal moves
-                        MoveInstance currentMove = LegalMovesInst.LegalMoves[k];
-                        MakeMove(matchData, currentMove, undoStack);
-                        int moveEval = GetEvaluation(matchData, undoStack, MAX_DEPTH-1, alpha, beta);
-                        if (moveEval < minEval){
-                            moveFound = true;
-                            minEval = moveEval;
-                            CopyMove(&BestMove, &currentMove);
+                } else{
+                    if (piece >= 'a' && piece <= 'z'){ //For all black pieces on board
+                        LegalMovesInstance LegalMovesInst = GetLegalMoves(matchData, square);
+                        for (int k = 0; k < LegalMovesInst.numMoves; k++){ //Try out all legal moves
+                            MoveInstance currentMove = LegalMovesInst.LegalMoves[k];
+                            MakeMove(matchData, currentMove, undoStack);
+                            int moveEval = GetEvaluation(matchData, undoStack, depth-1, alpha, beta, &searchStopped);
+                            if (moveEval < minEval){
+                                moveFound = true;
+                                minEval = moveEval;
+                                CopyMove(&TempBestMove, &currentMove);
+                            }
+                            if (moveEval < beta) beta = moveEval;
+                            UnmakeMove(matchData, undoStack);
+                            if (beta <= alpha) break;
                         }
-                        if (moveEval < beta) beta = moveEval;
-                        UnmakeMove(matchData, undoStack);
-                        if (beta <= alpha) break;
                     }
                 }
             }
         }
+        BestMove = TempBestMove;
     }
 
     if (!moveFound) return (MoveInstance){{'0',0},{'0',0},0}; //No available moves
