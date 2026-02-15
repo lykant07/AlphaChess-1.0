@@ -3,10 +3,9 @@
 #include <string.h>
 #include <limits.h>
 #include <sys/select.h>
+#include <time.h>
 #include <unistd.h>
 #include "commands.h"
-
-#define MAX_DEPTH 6
 
 bool inputAvailable(void) {
     struct timeval tv = {0, 0}; //Return results immediately
@@ -24,7 +23,7 @@ void CopyMove(MoveInstance* dest, MoveInstance* src){
     dest->promote = src->promote;
 }
 
-int GetEvaluation(MatchDataInstance* matchData, UndoStackInstance* undoStack, unsigned int depth, int alpha, int beta, bool* searchStopped){
+int GetEvaluation(MatchDataInstance* matchData, UndoStackInstance* undoStack, unsigned int depth, int alpha, int beta, bool* searchStopped, int* maxNodes, int* nodesSearched, time_t* startTime, double* timeLimit){
     if (inputAvailable()){
         char buf[256];
         char* temp = fgets(buf, sizeof(buf), stdin);
@@ -34,7 +33,15 @@ int GetEvaluation(MatchDataInstance* matchData, UndoStackInstance* undoStack, un
             }
         }
     }
-    
+    if (*timeLimit){
+        time_t currentTime;
+        time(&currentTime);
+        if (difftime(currentTime, *startTime) > *timeLimit) *searchStopped = true;
+    }
+    if (*maxNodes){
+        if (*nodesSearched > *maxNodes) *searchStopped = true;
+    }
+    (*nodesSearched)++;
     if (depth == 0 || (*searchStopped)) return matchData->eval;
 
     int maxEval = INT_MIN;
@@ -52,7 +59,8 @@ int GetEvaluation(MatchDataInstance* matchData, UndoStackInstance* undoStack, un
                         foundMove = true;
                         MoveInstance currentMove = LegalMovesInst.LegalMoves[k];
                         MakeMove(matchData, currentMove, undoStack);
-                        int moveEval = GetEvaluation(matchData, undoStack, depth-1, alpha, beta, searchStopped);
+                        int moveEval = GetEvaluation(matchData, undoStack, depth-1, alpha, beta, searchStopped, maxNodes, nodesSearched, startTime, timeLimit);
+                        if (*searchStopped) {free(LegalMovesInst.LegalMoves); break;}
                         if (moveEval > maxEval) maxEval = moveEval;
                         if (moveEval > alpha) alpha = moveEval;
                         UnmakeMove(matchData, undoStack);
@@ -67,7 +75,8 @@ int GetEvaluation(MatchDataInstance* matchData, UndoStackInstance* undoStack, un
                         foundMove = true;
                         MoveInstance currentMove = LegalMovesInst.LegalMoves[k];
                         MakeMove(matchData, currentMove, undoStack);
-                        int moveEval = GetEvaluation(matchData, undoStack, depth-1, alpha, beta, searchStopped);
+                        int moveEval = GetEvaluation(matchData, undoStack, depth-1, alpha, beta, searchStopped, maxNodes, nodesSearched, startTime, timeLimit);
+                        if (*searchStopped) {free(LegalMovesInst.LegalMoves); break;}
                         if (moveEval < minEval) minEval = moveEval;
                         if (moveEval < beta) beta = moveEval;
                         UnmakeMove(matchData, undoStack);
@@ -90,12 +99,31 @@ int GetEvaluation(MatchDataInstance* matchData, UndoStackInstance* undoStack, un
     }
 }
 
-MoveInstance GetBestMove(MatchDataInstance* matchData, UndoStackInstance* undoStack){
+MoveInstance GetBestMove(MatchDataInstance* matchData, UndoStackInstance* undoStack, GoParams searchParams){
 
     MoveInstance BestMove = {{'0',0},{'0',0},0};
     bool moveFound = false;
     bool searchStopped = false;
-    
+    int MAX_DEPTH = 6; //Default
+    if (searchParams.depth) MAX_DEPTH = searchParams.depth;
+    time_t startTime;
+    double timeLimit = 0;
+    if (searchParams.movetime){
+        timeLimit = searchParams.movetime / 1000.0;
+    } else if (searchParams.infinite){
+        timeLimit = 0;
+        MAX_DEPTH = INT_MAX;
+    } else if (searchParams.wtime && matchData->playerTurn == 'w'){
+        timeLimit = searchParams.wtime / 1000.0;
+    } else if (searchParams.btime && matchData->playerTurn == 'b'){
+        timeLimit = searchParams.btime / 1000.0;
+    }
+    timeLimit *= 0.9; //Dont use all of the available time (risky)
+    int maxNodes = 0;
+    int nodesSearched = 0;
+    if (searchParams.nodes) maxNodes = searchParams.nodes;
+
+    time(&startTime);
     for (int depth = 1; depth <= MAX_DEPTH && !searchStopped; depth++){ //Check all depths starting from 1 to ensure that we always have a move ready
         int maxEval = INT_MIN;
         int minEval = INT_MAX;
@@ -116,7 +144,7 @@ MoveInstance GetBestMove(MatchDataInstance* matchData, UndoStackInstance* undoSt
                             if (currentMove.promote) putchar(currentMove.promote);
                             putchar('\n');*/
                             MakeMove(matchData, currentMove, undoStack);
-                            int moveEval = GetEvaluation(matchData, undoStack, depth-1, alpha, beta, &searchStopped);
+                            int moveEval = GetEvaluation(matchData, undoStack, depth-1, alpha, beta, &searchStopped, &maxNodes, &nodesSearched, &startTime, &timeLimit);
                             if (moveEval > maxEval){
                                 moveFound = true;
                                 maxEval = moveEval;
@@ -133,7 +161,7 @@ MoveInstance GetBestMove(MatchDataInstance* matchData, UndoStackInstance* undoSt
                         for (int k = 0; k < LegalMovesInst.numMoves; k++){ //Try out all legal moves
                             MoveInstance currentMove = LegalMovesInst.LegalMoves[k];
                             MakeMove(matchData, currentMove, undoStack);
-                            int moveEval = GetEvaluation(matchData, undoStack, depth-1, alpha, beta, &searchStopped);
+                            int moveEval = GetEvaluation(matchData, undoStack, depth-1, alpha, beta, &searchStopped, &maxNodes, &nodesSearched, &startTime, &timeLimit);
                             if (moveEval < minEval){
                                 moveFound = true;
                                 minEval = moveEval;

@@ -69,6 +69,18 @@ typedef struct{
     bool gameFinished;
 } MatchDataInstance;
 
+typedef struct{
+    int depth;
+    int nodes;
+    int mate;
+    int movetime;
+    int wtime;
+    int btime;
+    int winc;
+    int binc;
+    bool infinite;
+} GoParams;
+
 void ResetBoard(MatchDataInstance* matchData);
 void ShowBoard(BoardInstance Board);
 char* GetFEN(MatchDataInstance* matchData);
@@ -78,4 +90,4 @@ void UnmakeMove(MatchDataInstance* md, UndoStackInstance* undoStack);
 bool PlayMove(MatchDataInstance* matchData, MoveInstance move, UndoStackInstance* undoStack);
 bool PlayMoves(MatchDataInstance* matchData, char* moves, UndoStackInstance* undoStack);
 LegalMovesInstance GetLegalMoves(MatchDataInstance* matchData, SquareInstance square);
-MoveInstance GetBestMove(MatchDataInstance* matchData, UndoStackInstance* undoStack);
+MoveInstance GetBestMove(MatchDataInstance* matchData, UndoStackInstance* undoStack, GoParams searchParams);

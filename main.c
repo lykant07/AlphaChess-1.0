@@ -112,6 +112,41 @@ int main(void){
                         }
                     }
                 }
+            } else if (strcmp(params[0], "go") == 0){
+                GoParams searchParams = {0,0,0,0,0,0,0,0,false};
+                for (int i = 1; i < numParams; i++){
+                    if (i != numParams-1){
+                        if (strcmp(params[i], "depth") == 0){
+                            searchParams.depth = atoi(params[i+1]);
+                        } else if (strcmp(params[i], "nodes") == 0){
+                            searchParams.nodes = atoi(params[i+1]);
+                        } else if (strcmp(params[i], "mate") == 0){
+                            searchParams.mate = atoi(params[i+1]);
+                        } else if (strcmp(params[i], "movetime") == 0){
+                            searchParams.movetime = atoi(params[i+1]);
+                        } else if (strcmp(params[i], "wtime") == 0){
+                            searchParams.wtime = atoi(params[i+1]);
+                        } else if (strcmp(params[i], "btime") == 0){
+                            searchParams.btime = atoi(params[i+1]);
+                        } else if (strcmp(params[i], "winc") == 0){
+                            searchParams.winc = atoi(params[i+1]);
+                        } else if (strcmp(params[i], "binc") == 0){
+                            searchParams.binc = atoi(params[i+1]);
+                        }
+                    }
+                    if (strcmp(params[i], "infinite") == 0){
+                        searchParams.infinite = true;
+                    }
+                }
+                MoveInstance BestMove = GetBestMove(&matchData, &undoStack, searchParams);
+                if (BestMove.promote){
+                    printf("bestmove %c%d%c%d%c\n", BestMove.from.col, BestMove.from.row, BestMove.to.col, BestMove.to.row, BestMove.promote);
+                    fflush(stdout);
+                } else{
+                    printf("bestmove %c%d%c%d\n", BestMove.from.col, BestMove.from.row, BestMove.to.col, BestMove.to.row);
+                    fflush(stdout);
+                }
+                PlayMove(&matchData, BestMove, &undoStack);
             } else if (numParams == 1){
                 if (strcmp(params[0], "uci") == 0){
                     printf("id name %s %s\n", engineName, engineVersion);
@@ -125,16 +160,6 @@ int main(void){
                     ResetBoard(&matchData);
                 } else if (strcmp(params[0], "showboard") == 0){
                     ShowBoard(matchData.Board);
-                } else if (strcmp(params[0], "go") == 0){
-                    MoveInstance BestMove = GetBestMove(&matchData, &undoStack);
-                    if (BestMove.promote){
-                        printf("bestmove %c%d%c%d%c\n", BestMove.from.col, BestMove.from.row, BestMove.to.col, BestMove.to.row, BestMove.promote);
-                        fflush(stdout);
-                    } else{
-                        printf("bestmove %c%d%c%d\n", BestMove.from.col, BestMove.from.row, BestMove.to.col, BestMove.to.row);
-                        fflush(stdout);
-                    }
-                    PlayMove(&matchData, BestMove, &undoStack);
                 } else if (strcmp(params[0], "quit") == 0){
                     printf("quit\n");
                     fflush(stdout);
